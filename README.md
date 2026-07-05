@@ -36,7 +36,7 @@ Then in `~/.claude/settings.json`:
 ## Tweaks
 
 - `gauge_denom` — the context early-warning threshold (default 200000).
-- Per-model `$/M` rates live in the two `case "$name"` blocks — update when pricing changes.
+- Per-model `$/M` rates live in the `model_rates()` function — one place to edit when pricing changes.
 
 ## Notes
 

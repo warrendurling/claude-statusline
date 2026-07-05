@@ -59,6 +59,19 @@ if [ -n "$used_tokens" ]; then
   ctx_vis=$((6 + 1 + 10 + 1 + 11 + 1 + 4 + 1 + 6))
 fi
 
+# --- Per-model $/M token rates (input, output) ---
+# Single source of truth for pricing — edit here when prices change.
+# Unknown models fall back to opus-ish rates.
+model_rates() {
+  case "$1" in
+    fable)  in_rate=10; out_rate=50 ;;
+    opus)   in_rate=5;  out_rate=25 ;;
+    sonnet) in_rate=3;  out_rate=15 ;;
+    haiku)  in_rate=1;  out_rate=5  ;;
+    *)      in_rate=5;  out_rate=25 ;;
+  esac
+}
+
 # --- Per-model output tokens this session ---
 # cost_str below is actual $ spend: input + output + cache read (0.1x) +
 # cache write (1.25x for 5m TTL, 2x for 1h TTL).
@@ -93,25 +106,12 @@ if [ -n "$transcript" ] && [ -f "$transcript" ]; then
     # not raw output tokens (a model can cost far more/less per output token).
     total_cost=0
     while IFS=$'\t' read -r name t intok cr cw5 cw1h; do
-      case "$name" in
-        fable)  in_rate=10; out_rate=50 ;;
-        opus)   in_rate=5;  out_rate=25 ;;
-        sonnet) in_rate=3;  out_rate=15 ;;
-        haiku)  in_rate=1;  out_rate=5  ;;
-        *)      in_rate=5;  out_rate=25 ;;
-      esac
+      model_rates "$name"
       cost_micro=$(awk -v i="$intok" -v o="$t" -v cr="$cr" -v cw5="$cw5" -v cw1h="$cw1h" -v ir="$in_rate" -v orr="$out_rate" 'BEGIN{printf "%.0f", i*ir + o*orr + cr*ir*0.1 + cw5*ir*1.25 + cw1h*ir*2.0}')
       total_cost=$((total_cost + cost_micro))
     done <<< "$model_data"
     while IFS=$'\t' read -r name t intok cr cw5 cw1h; do
-      # Per-model $/M token rates (input, output); unknown models fall back to opus-ish rates
-      case "$name" in
-        fable)  in_rate=10; out_rate=50 ;;
-        opus)   in_rate=5;  out_rate=25 ;;
-        sonnet) in_rate=3;  out_rate=15 ;;
-        haiku)  in_rate=1;  out_rate=5  ;;
-        *)      in_rate=5;  out_rate=25 ;;
-      esac
+      model_rates "$name"
       read -r cost_micro cost_str <<< "$(awk -v i="$intok" -v o="$t" -v cr="$cr" -v cw5="$cw5" -v cw1h="$cw1h" -v ir="$in_rate" -v orr="$out_rate" 'BEGIN{
         micro = i*ir + o*orr + cr*ir*0.1 + cw5*ir*1.25 + cw1h*ir*2.0
         cost = micro / 1000000
