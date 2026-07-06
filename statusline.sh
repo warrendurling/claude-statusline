@@ -54,9 +54,8 @@ if [ -n "$used_tokens" ]; then
   # Mirror model-line field widths (nums 11, pct 4, blank 6 where cost sits)
   # so the ctx bar lands in the same column as the model bars.
   ctx_nums=$(printf '%11s' "${used_k}k/${denom_k}k")
-  ctx_pct=$(printf '%4s' "${used_int}%")
-  context_str=$(printf "${ctx_color}%-6s %s %s %s %6s\033[0m" "ctx" "$bar" "$ctx_nums" "$ctx_pct" "")
-  ctx_vis=$((6 + 1 + 10 + 1 + 11 + 1 + 4 + 1 + 6))
+  context_str=$(printf "${ctx_color}%-7s %s %s %11s\033[0m" "context" "$bar" "$ctx_nums" "")
+  ctx_vis=$((7 + 1 + 10 + 1 + 11 + 1 + 11))
 fi
 
 # --- Per-model $/M token rates (input, output) ---
@@ -101,26 +100,22 @@ if [ -n "$transcript" ] && [ -f "$transcript" ]; then
     | sort_by(-.o)
     | .[] | (.m | sub("^claude-"; "") | sub("-[0-9].*$"; "")) + "\t" + (.o | tostring) + "\t" + (.i | tostring) + "\t" + (.cr | tostring) + "\t" + (.cw5 | tostring) + "\t" + (.cw1h | tostring)' 2>/dev/null)
   if [ -n "$model_data" ]; then
-    # First pass: per-model cost in integer micro-dollars (bash has no floats),
-    # summed for the bar-length percentage below — bars must track $ spend,
-    # not raw output tokens (a model can cost far more/less per output token).
-    total_cost=0
+    # First pass: total tokens per model (input + cache + output), summed for
+    # the bar/percentage below — bars track amount of use, not $ spend.
+    total_use=0
     while IFS=$'\t' read -r name t intok cr cw5 cw1h; do
-      model_rates "$name"
-      cost_micro=$(awk -v i="$intok" -v o="$t" -v cr="$cr" -v cw5="$cw5" -v cw1h="$cw1h" -v ir="$in_rate" -v orr="$out_rate" 'BEGIN{printf "%.0f", i*ir + o*orr + cr*ir*0.1 + cw5*ir*1.25 + cw1h*ir*2.0}')
-      total_cost=$((total_cost + cost_micro))
+      total_use=$((total_use + intok + cr + cw5 + cw1h + t))
     done <<< "$model_data"
     while IFS=$'\t' read -r name t intok cr cw5 cw1h; do
       model_rates "$name"
-      read -r cost_micro cost_str <<< "$(awk -v i="$intok" -v o="$t" -v cr="$cr" -v cw5="$cw5" -v cw1h="$cw1h" -v ir="$in_rate" -v orr="$out_rate" 'BEGIN{
-        micro = i*ir + o*orr + cr*ir*0.1 + cw5*ir*1.25 + cw1h*ir*2.0
-        cost = micro / 1000000
-        if (cost < 10) s = sprintf("$%.2f", cost)
-        else if (cost < 100) s = sprintf("$%.1f", cost)
-        else s = sprintf("$%d", cost)
-        printf "%.0f %s", micro, s
-      }')"
-      pct=$(( total_cost > 0 ? cost_micro * 100 / total_cost : 0 ))
+      cost_str=$(awk -v i="$intok" -v o="$t" -v cr="$cr" -v cw5="$cw5" -v cw1h="$cw1h" -v ir="$in_rate" -v orr="$out_rate" 'BEGIN{
+        cost = (i*ir + o*orr + cr*ir*0.1 + cw5*ir*1.25 + cw1h*ir*2.0) / 1000000
+        if (cost < 10) printf "$%.2f", cost
+        else if (cost < 100) printf "$%.1f", cost
+        else printf "$%d", cost
+      }')
+      use=$((intok + cr + cw5 + cw1h + t))
+      pct=$(( total_use > 0 ? use * 100 / total_use : 0 ))
       filled=$((pct / 10)); [ "$filled" -gt 10 ] && filled=10
       empty=$((10 - filled))
       bar=""
@@ -145,12 +140,12 @@ if [ -n "$transcript" ] && [ -f "$transcript" ]; then
       # visible length — bars stack cleanly and right edges stay flush.
       # Computed by parts: bar glyphs are multibyte, so ${#whole_line} would
       # overcount under a C locale.
-      vis=$((6 + 1 + 10 + 1 + 11 + 1 + 4 + 1 + 6))
+      vis=$((7 + 1 + 10 + 1 + 11 + 1 + 4 + 1 + 6))
       lpad=$((term_width - vis)); [ "$lpad" -lt 0 ] && lpad=0
       # Braille blanks (U+2800): render as blank but survive the renderer's
       # leading-whitespace trim, so the right-alignment actually sticks
       pad=$(printf '%*s' "$lpad" '' | sed 's/ /⠀/g')
-      model_lines="${model_lines}\n${pad}${mcolor}$(printf '%-6s' "$name") ${bar} $(printf '%11s %4s %6s' "${tok_str}:${in_str}" "${pct}%" "$cost_str")\033[0m"
+      model_lines="${model_lines}\n${pad}${mcolor}$(printf '%-7s' "$name") ${bar} $(printf '%11s %4s %6s' "${tok_str}:${in_str}" "${pct}%" "$cost_str")\033[0m"
     done <<< "$model_data"
   fi
 fi
