@@ -3,13 +3,13 @@
 A cost-aware status line for [Claude Code](https://claude.com/claude-code). Shows live context usage plus per-model token counts and real dollar spend for the session — including everything spent by subagents.
 
 ```
-~/my/project  |  main          ctx ████████░░   165k/200k  82%
-                            sonnet ████░░░░░░    98k:12.4M  44%  $9.64
-                            fable  █████░░░░░    60k:8.8M   55%  $12.3
+~/my/project  |  main      context ████████░░   165k/200k
+                            sonnet  ████░░░░░░    98k:12.4M  59%  $9.64
+                            fable   ███░░░░░░░    60k:8.8M   40%  $12.3
 ```
 
-- **ctx** — tokens currently in the context window, gauged against a 200k early-warning threshold (green → yellow → red). Independent of the model's real window and auto-compaction.
-- **Model lines** — one per model used this session, `out:in` (tokens written : total tokens read, including cache). Bars and percentages track **dollar share**, not tokens, so an expensive model with few tokens still shows as the big spender.
+- **context** — tokens currently in the context window, gauged against a 200k early-warning threshold (green → yellow → red). Independent of the model's real window and auto-compaction.
+- **Model lines** — one per model used this session, `out:in` (tokens written : total tokens read, including cache). Bars and percentages track **token share** (input + cache + output) — how much of the session's work each model handled; the `$` column shows what it cost.
 - **$** — actual cost: input + output + cache reads (0.1×) + cache writes (1.25× 5m / 2× 1h), at per-model rates.
 - **Subagent-aware** — follows task output files referenced in the transcript (recursively, for nested subagents) so delegated work is counted too.
 
